@@ -1,0 +1,9 @@
+# clients/client01.yml
+username: client01
+domain: client01domain.com
+email: client01@example.com
+email_accounts:
+  - user: info
+create_email_accounts: false
+package: clients
+ip: 145.223.34.210

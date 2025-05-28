@@ -1,0 +1,191 @@
+- name: Provision DirectAdmin user + services
+  block:
+
+    - name: Check if DirectAdmin user exists
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_SHOW_USERS"
+        method: GET
+        user: "{{ directadmin_api_username }}"
+        password: "{{ directadmin_api_key }}"
+        force_basic_auth: yes
+        return_content: yes
+      register: user_list
+
+    - name: Set password fact from file if user exists
+      set_fact:
+        directadmin_user_password: "{{ lookup('file', './output/{{ username }}_creds.txt') | regex_search('DirectAdmin Password: (.*)', '\\1') }}"
+      when: username in user_list.content
+
+    - name: Generate strong random password for new DirectAdmin user
+      set_fact:
+        directadmin_user_password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits,special') }}"
+      when: username not in user_list.content
+
+    - name: Show generated or loaded DirectAdmin password
+      debug:
+        msg: "Using password for user {{ username }}: {{ directadmin_user_password }}"
+
+    - name: Save user credentials to a file
+      when: username not in user_list.content
+      copy:
+        dest: "./output/{{ username }}_creds.txt"
+        content: |
+          Username: {{ username }}
+          Domain: {{ domain }}
+          Email: {{ email }}
+          DirectAdmin Password: {{ directadmin_user_password }}
+
+          {% if create_email_accounts | default(false) and email_accounts_with_passwords is defined %}
+          Mailboxes:
+          {% for account in email_accounts_with_passwords %}
+          - {{ account.user }}@{{ domain }}: {{ account.pass }}
+          {% endfor %}
+          {% endif %}
+
+    - name: Create DirectAdmin user
+      when: username not in user_list.content
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_ACCOUNT_USER"
+        method: POST
+        user: "{{ directadmin_api_username }}"
+        password: "{{ directadmin_api_key }}"
+        force_basic_auth: yes
+        body_format: form-urlencoded
+        return_content: yes
+        body:
+          action: create
+          add: 'yes'
+          username: "{{ username }}"
+          email: "{{ email }}"
+          passwd: "{{ directadmin_user_password }}"
+          passwd2: "{{ directadmin_user_password }}"
+          domain: "{{ domain }}"
+          package: "{{ package }}"
+          ip: "{{ ip }}"
+        status_code: 200
+      register: user_result
+      tags: create_user
+
+    - name: Show user creation result
+      when: user_result is defined
+      debug:
+        var: user_result.content
+
+    - name: Wait for DirectAdmin to finish provisioning user
+      pause:
+        seconds: 5
+
+    - name: Generate strong random passwords for email accounts
+      set_fact:
+        email_accounts_with_passwords: >-
+          {{
+            email_accounts | map('combine', {
+              'pass': lookup('password', '/dev/null length=20 chars=ascii_letters,digits,special')
+            }) | list
+          }}
+      when: email_accounts is defined and email_accounts | length > 0
+
+    - name: Create email accounts if enabled
+      when:
+        - create_email_accounts | default(false)
+        - email_accounts is defined and email_accounts | length > 0
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_POP"
+        method: POST
+        user: "{{ username }}"  # Use the DirectAdmin user, not admin
+        password: "{{ directadmin_user_password }}"
+        force_basic_auth: yes
+        body_format: form-urlencoded
+        body:
+          action: create
+          domain: "{{ domain }}"
+          user: "{{ item.user }}"
+          passwd: "{{ item.pass }}"
+          passwd2: "{{ item.pass }}"
+          quota: 5000
+      loop: "{{ email_accounts_with_passwords }}"
+      loop_control:
+        label: "{{ item.user }}@{{ domain }}"
+      register: email_results
+      tags: create_mail
+
+    - name: Show email creation results
+      debug:
+        var: email_results
+
+    - name: Check if DKIM is enabled
+      stat:
+        path: "/etc/virtual/{{ domain }}/dkim.public.key"
+      register: dkim_key
+      delegate_to: "{{ directadmin_host | default('localhost') }}"
+
+    - name: Enable DKIM via API
+      when: not dkim_key.stat.exists
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_EMAIL_DKIM?action=enable&domain={{ domain }}"
+        method: GET
+        user: "{{ username }}"
+        password: "{{ directadmin_user_password }}"
+        force_basic_auth: yes
+        status_code: 200
+      register: dkim_result
+      tags: enable_dkim
+
+    - name: Show DKIM result
+      debug:
+        var: dkim_result
+
+    - name: Get existing mailboxes
+      when: create_email_accounts | default(false)
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_POP?domain={{ domain }}"
+        method: GET
+        user: "{{ username }}"
+        password: "{{ directadmin_user_password }}"
+        force_basic_auth: yes
+        return_content: yes
+      register: mailbox_list
+
+    - name: Filter mailboxes to create
+      set_fact:
+        mailboxes_to_create: >-
+          {{
+            email_accounts_with_passwords
+            | rejectattr(
+                'user',
+                'in',
+                (
+                  mailbox_list.content
+                  | community.general.from_urlencoded
+                  | dict2items
+                  | selectattr('key', 'search', '^list\\d+$')
+                  | map(attribute='value')
+                  | list
+                )
+              )
+          }}
+      when: create_email_accounts | default(false)
+
+    - name: Create only missing email accounts
+      when:
+        - create_email_accounts | default(false)
+        - mailboxes_to_create | length > 0
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_POP"
+        method: POST
+        user: "{{ username }}"
+        password: "{{ directadmin_user_password }}"
+        force_basic_auth: yes
+        body_format: form-urlencoded
+        body:
+          action: create
+          domain: "{{ domain }}"
+          user: "{{ item.user }}"
+          passwd: "{{ item.pass }}"
+          passwd2: "{{ item.pass }}"
+          quota: 5000
+      loop: "{{ mailboxes_to_create }}"
+      loop_control:
+        label: "{{ item.user }}@{{ domain }}"
+      register: email_results
+      tags: create_mail

@@ -1,0 +1,8 @@
+---
+- name: Test SSH connection to webhosting
+  hosts: webhosting
+  gather_facts: false
+
+  tasks:
+    - name: Ping server
+      ansible.builtin.ping:
