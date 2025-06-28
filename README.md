@@ -95,3 +95,6 @@ MIT License
 ---
 
 **Questions or contributions welcome!**
+
+
+ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --ask-vault-pass
