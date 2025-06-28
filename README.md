@@ -98,3 +98,5 @@ MIT License
 
 
 ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --ask-vault-pass
+
+set right ssh key - git remote set-url origin git@github:ToTheChrist/mrhost-ansible.git
