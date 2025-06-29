@@ -2,8 +2,8 @@ name: Provision Client Domain
 
 on:
   push:
-    paths:
-      - 'clients/*.yml'
+    branches:
+      - main
 
 jobs:
   provision:
