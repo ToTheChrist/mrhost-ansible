@@ -20,6 +20,9 @@ jobs:
           pip3 install ansible
           ansible-galaxy collection install community.general
 
+      - name: Make inventory script executable
+        run: chmod +x generate_inventory.py
+
       - name: Run Ansible playbook
         run: |
           echo "$VAULT_PASSWORD" > vault_pass.txt
@@ -27,3 +30,4 @@ jobs:
             --vault-password-file vault_pass.txt
         env:
           VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}
+
