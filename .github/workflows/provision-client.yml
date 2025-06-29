@@ -3,7 +3,7 @@ name: Provision Client Domain
 on:
   push:
     branches:
-      - main
+      - '**'  # ← This means “all branches”
 
 jobs:
   provision:
