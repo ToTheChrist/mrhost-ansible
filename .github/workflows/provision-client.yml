@@ -23,7 +23,7 @@ jobs:
       - name: Run Ansible playbook
         run: |
           echo "$VAULT_PASSWORD" > vault_pass.txt
-          ansible-playbook playbooks/full_onboarding.yml \
+          ansible-playbook playbooks/fullonboard.yml \
             --vault-password-file vault_pass.txt
         env:
           VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}
