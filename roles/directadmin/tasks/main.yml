@@ -15,6 +15,7 @@
       set_fact:
         directadmin_user_password: "{{ lookup('file', './output/{{ username }}_creds.txt') | regex_search('DirectAdmin Password: (.*)', '\\1') }}"
       when: username in user_list.content
+      ignore_errors: true
 
     - name: Generate strong random password for new DirectAdmin user
       set_fact:
@@ -43,7 +44,7 @@
           {% endif %}
 
     - name: Create DirectAdmin user
-      when: username not in user_list.content
+      when: username not in user_list.content and not safe_mode | default(false)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_ACCOUNT_USER"
         method: POST
@@ -64,6 +65,7 @@
           ip: "{{ ip }}"
         status_code: 200
       register: user_result
+      failed_when: false
       tags: create_user
 
     - name: Show user creation result
@@ -89,10 +91,11 @@
       when:
         - create_email_accounts | default(false)
         - email_accounts is defined and email_accounts | length > 0
+        - not safe_mode | default(false)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_POP"
         method: POST
-        user: "{{ username }}"  # Use the DirectAdmin user, not admin
+        user: "{{ username }}"
         password: "{{ directadmin_user_password }}"
         force_basic_auth: yes
         body_format: form-urlencoded
@@ -120,7 +123,7 @@
       delegate_to: "{{ directadmin_host | default('localhost') }}"
 
     - name: Enable DKIM via API
-      when: not dkim_key.stat.exists
+      when: not dkim_key.stat.exists and not safe_mode | default(false)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_EMAIL_DKIM?action=enable&domain={{ domain }}"
         method: GET
@@ -129,6 +132,7 @@
         force_basic_auth: yes
         status_code: 200
       register: dkim_result
+      failed_when: false
       tags: enable_dkim
 
     - name: Show DKIM result
@@ -170,6 +174,7 @@
       when:
         - create_email_accounts | default(false)
         - mailboxes_to_create | length > 0
+        - not safe_mode | default(false)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_POP"
         method: POST
@@ -184,7 +189,7 @@
           passwd: "{{ item.pass }}"
           passwd2: "{{ item.pass }}"
           quota: 5000
-      loop: "{{ mailboxes_to_create }}"
+      loop: "{{ mailboxes_to_create | default([]) }}"
       loop_control:
         label: "{{ item.user }}@{{ domain }}"
       register: email_results

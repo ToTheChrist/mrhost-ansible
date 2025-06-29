@@ -6,11 +6,12 @@
       Authorization: "Bearer {{ cloudflare_api_token }}"
       Content-Type: "application/json"
     return_content: yes
-  register: zone_check
+  register: cloudflare_zone_check
 
-- name: Set fact if zone exists
+- name: Set zone_id if zone exists
   set_fact:
-    zone_exists: "{{ zone_check.json.result | length > 0 }}"
+    zone_exists: "{{ cloudflare_zone_check.json.result | length > 0 }}"
+    zone_id: "{{ cloudflare_zone_check.json.result[0].id if cloudflare_zone_check.json.result | length > 0 else '' }}"
 
 - name: Create Cloudflare zone via API if not exists
   uri:
@@ -24,9 +25,27 @@
       name: "{{ domain }}"
       jump_start: false
     status_code: 200
+  register: zone_create_result
+  when: not zone_exists and not safe_mode | default(false)
+  failed_when: false
+
+- name: Re-fetch zone ID after creation
+  uri:
+    url: "https://api.cloudflare.com/client/v4/zones?name={{ domain }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cloudflare_api_token }}"
+      Content-Type: "application/json"
+    return_content: yes
+  register: cloudflare_zone_check_fresh
   when: not zone_exists
 
-- name: Get existing DNS records
+- name: Set final zone_id
+  set_fact:
+    zone_id: "{{ cloudflare_zone_check_fresh.json.result[0].id }}"
+  when: not zone_exists
+
+- name: Get existing DNS records from Cloudflare
   uri:
     url: "https://api.cloudflare.com/client/v4/zones/{{ zone_id }}/dns_records"
     method: GET
@@ -34,10 +53,10 @@
       Authorization: "Bearer {{ cloudflare_api_token }}"
       Content-Type: "application/json"
     return_content: yes
-  register: existing_records
+  register: existing_dns_records
+  when: zone_id is defined
 
-
-- name: Create DNS records in Cloudflare
+- name: Create or remove DNS records in Cloudflare
   community.general.cloudflare_dns:
     api_token: "{{ cloudflare_api_token }}"
     zone: "{{ domain }}"
@@ -47,6 +66,8 @@
     ttl: "{{ item.ttl }}"
     proxied: "{{ item.proxied | default(omit) }}"
     priority: "{{ item.priority | default(omit) }}"
-    state: present
+    state: "{{ item.state | default('present') }}"
   loop: "{{ cloudflare_dns_records }}"
-  when: cloudflare_dns_records is defined
+  when:
+    - zone_id is defined
+    - not safe_mode | default(false)
