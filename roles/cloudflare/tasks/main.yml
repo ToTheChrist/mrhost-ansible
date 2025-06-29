@@ -1,29 +1,41 @@
-- name: Get Cloudflare Zone ID
+- name: Check if Cloudflare zone exists
   uri:
-    url: "https://api.cloudflare.com/client/v4/zones"
+    url: "https://api.cloudflare.com/client/v4/zones?name={{ domain }}"
     method: GET
     headers:
       Authorization: "Bearer {{ cloudflare_api_token }}"
       Content-Type: "application/json"
     return_content: yes
-  register: cloudflare_zones
+  register: zone_check
 
-- name: Set Zone ID Fact
+- name: Set fact if zone exists
   set_fact:
-    zone_id: "{{ cloudflare_zones.json.result | selectattr('name', 'equalto', cloudflare_zone) | map(attribute='id') | first }}"
+    zone_exists: "{{ zone_check.json.result | length > 0 }}"
 
-- name: Create A Record
+- name: Create Cloudflare zone via API if not exists
   uri:
-    url: "https://api.cloudflare.com/client/v4/zones/{{ zone_id }}/dns_records"
+    url: "https://api.cloudflare.com/client/v4/zones"
     method: POST
     headers:
       Authorization: "Bearer {{ cloudflare_api_token }}"
       Content-Type: "application/json"
     body_format: json
     body:
-      type: "A"
       name: "{{ domain }}"
-      content: "{{ ip }}"
-      ttl: 3600
-      proxied: false
+      jump_start: false
     status_code: 200
+  when: not zone_exists
+
+- name: Create DNS records in Cloudflare
+  community.general.cloudflare_dns:
+    api_token: "{{ cloudflare_api_token }}"
+    zone: "{{ domain }}"
+    type: "{{ item.type }}"
+    record: "{{ item.name }}"
+    value: "{{ item.value }}"
+    ttl: "{{ item.ttl }}"
+    proxied: "{{ item.proxied | default(omit) }}"
+    priority: "{{ item.priority | default(omit) }}"
+    state: present
+  loop: "{{ cloudflare_dns_records }}"
+  when: cloudflare_dns_records is defined

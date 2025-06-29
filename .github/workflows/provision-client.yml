@@ -1,0 +1,29 @@
+name: Provision Client Domain
+
+on:
+  push:
+    paths:
+      - 'clients/*.yml'
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python and Ansible
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip
+          pip3 install ansible
+          ansible-galaxy collection install community.general
+
+      - name: Run Ansible playbook
+        run: |
+          echo "$VAULT_PASSWORD" > vault_pass.txt
+          ansible-playbook playbooks/full_onboarding.yml \
+            --vault-password-file vault_pass.txt
+        env:
+          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}

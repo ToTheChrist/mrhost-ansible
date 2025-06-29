@@ -10,5 +10,6 @@
 
   roles:
     - role: directadmin
-  # - role: cloudflare
+    - role: cloudflare
   # - role: monitoring
+
