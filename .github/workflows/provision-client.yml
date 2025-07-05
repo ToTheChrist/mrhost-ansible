@@ -21,7 +21,7 @@ jobs:
           ansible-galaxy collection install community.general
 
       - name: Create vault password file
-        run: echo "${{ secrets.VAULT_PASSWORD }}" > vault_pass.txt
+        run: echo -n "${{ secrets.VAULT_PASSWORD }}" > vault_pass.txt
         # Secure the file so others can't read it
         shell: bash
 
