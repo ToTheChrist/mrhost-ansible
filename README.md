@@ -161,5 +161,5 @@ ansible-vault edit group_vars/all.yml
 To test a specific domain:
 
 
-ansible-playbook playbooks/full_onboarding.yml --limit client01domain.com --ask-vault-pass
+ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --ask-vault-pass -vvv
 

@@ -1,7 +1,8 @@
-- name: Provision DirectAdmin user + services
+- name: Provision DirectAdmin user and email services
   block:
 
-    - name: Check if DirectAdmin user exists
+    # 1. Query existing DirectAdmin users
+    - name: Query existing DirectAdmin users
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_SHOW_USERS"
         method: GET
@@ -11,23 +12,74 @@
         return_content: yes
       register: user_list
 
-    - name: Set password fact from file if user exists
+    # 2. Parse user list from URL-encoded string to list
+    - name: Parse DirectAdmin user list
+      set_fact:
+        user_list_parsed: >-
+          {{
+            user_list.content
+            | community.general.from_urlencoded
+            | dict2items
+            | map(attribute='value')
+            | list
+          }}
+
+    # 3. Query existing DirectAdmin domains
+    - name: Query existing DirectAdmin domains
+      uri:
+        url: "{{ directadmin_api_url }}/CMD_API_SHOW_DOMAINS"
+        method: GET
+        user: "{{ directadmin_api_username }}"
+        password: "{{ directadmin_api_key }}"
+        force_basic_auth: yes
+        return_content: yes
+      register: domain_list
+
+    # 4. Parse domain list from URL-encoded string to list
+    - name: Parse DirectAdmin domain list
+      set_fact:
+        domain_list_parsed: >-
+          {{
+            domain_list.content
+            | community.general.from_urlencoded
+            | dict2items
+            | map(attribute='value')
+            | list
+          }}
+
+    # 5. Fail if the user already exists
+    - name: Fail if DirectAdmin user already exists
+      fail:
+        msg: "DirectAdmin user {{ username }} already exists. Aborting playbook."
+      when: username in user_list_parsed
+
+    # 6. Fail if the domain already exists
+    - name: Fail if DirectAdmin domain already exists
+      fail:
+        msg: "DirectAdmin domain {{ domain }} already exists. Aborting playbook."
+      when: domain in domain_list_parsed
+
+    # ---- Continue with the rest of your tasks here ----
+
+
+    # 2. Load password if user exists, else generate new one
+    - name: Load DirectAdmin password from file (if user exists)
       set_fact:
         directadmin_user_password: "{{ lookup('file', './output/{{ username }}_creds.txt') | regex_search('DirectAdmin Password: (.*)', '\\1') }}"
       when: username in user_list.content
       ignore_errors: true
 
-    - name: Generate strong random password for new DirectAdmin user
+    - name: Generate strong password for new user (if needed)
       set_fact:
         directadmin_user_password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits,special') }}"
       when: username not in user_list.content
 
-    - name: Show generated or loaded DirectAdmin password
+    - name: Show selected DirectAdmin password
       debug:
         msg: "Using password for user {{ username }}: {{ directadmin_user_password }}"
 
-    - name: Save user credentials to a file
-      when: username not in user_list.content
+    # 3. Save credentials (if new)
+    - name: Save new DirectAdmin user credentials
       copy:
         dest: "./output/{{ username }}_creds.txt"
         content: |
@@ -42,9 +94,10 @@
           - {{ account.user }}@{{ domain }}: {{ account.pass }}
           {% endfor %}
           {% endif %}
+      when: username not in user_list.content
 
+    # 4. Create user if not present
     - name: Create DirectAdmin user
-      when: username not in user_list.content and not safe_mode | default(false)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_ACCOUNT_USER"
         method: POST
@@ -64,20 +117,22 @@
           package: "{{ package }}"
           ip: "{{ ip }}"
         status_code: 200
+      when: username not in user_list.content and not safe_mode | default(false)
       register: user_result
       failed_when: false
       tags: create_user
 
     - name: Show user creation result
-      when: user_result is defined
       debug:
         var: user_result.content
+      when: user_result is defined
 
     - name: Wait for DirectAdmin to finish provisioning user
       pause:
         seconds: 5
 
-    - name: Generate strong random passwords for email accounts
+    # 5. Prepare email accounts with random passwords (if needed)
+    - name: Generate strong passwords for email accounts
       set_fact:
         email_accounts_with_passwords: >-
           {{
@@ -87,11 +142,8 @@
           }}
       when: email_accounts is defined and email_accounts | length > 0
 
-    - name: Create email accounts if enabled
-      when:
-        - create_email_accounts | default(false)
-        - email_accounts is defined and email_accounts | length > 0
-        - not safe_mode | default(false)
+    # 6. Create email accounts if enabled
+    - name: Create email accounts via API
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_POP"
         method: POST
@@ -110,20 +162,24 @@
       loop_control:
         label: "{{ item.user }}@{{ domain }}"
       register: email_results
+      when:
+        - create_email_accounts | default(false)
+        - email_accounts_with_passwords is defined
+        - not safe_mode | default(false)
       tags: create_mail
 
     - name: Show email creation results
       debug:
         var: email_results
 
-    - name: Check if DKIM is enabled
+    # 7. DKIM setup
+    - name: Check if DKIM public key exists
       stat:
         path: "/etc/virtual/{{ domain }}/dkim.public.key"
       register: dkim_key
       delegate_to: "{{ directadmin_host | default('localhost') }}"
 
-    - name: Enable DKIM via API
-      when: not dkim_key.stat.exists and not safe_mode | default(false)
+    - name: Enable DKIM via API (if not already enabled)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_EMAIL_DKIM?action=enable&domain={{ domain }}"
         method: GET
@@ -131,16 +187,17 @@
         password: "{{ directadmin_user_password }}"
         force_basic_auth: yes
         status_code: 200
+      when: not dkim_key.stat.exists and not safe_mode | default(false)
       register: dkim_result
       failed_when: false
       tags: enable_dkim
 
-    - name: Show DKIM result
+    - name: Show DKIM enable result
       debug:
         var: dkim_result
 
-    - name: Get existing mailboxes
-      when: create_email_accounts | default(false)
+    # 8. (Optional) Check for and create only missing mailboxes
+    - name: Get current mailboxes (for idempotency)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_POP?domain={{ domain }}"
         method: GET
@@ -149,8 +206,9 @@
         force_basic_auth: yes
         return_content: yes
       register: mailbox_list
+      when: create_email_accounts | default(false)
 
-    - name: Filter mailboxes to create
+    - name: Identify missing mailboxes
       set_fact:
         mailboxes_to_create: >-
           {{
@@ -168,13 +226,9 @@
                 )
               )
           }}
-      when: create_email_accounts | default(false)
+      when: create_email_accounts | default(false) and mailbox_list is defined
 
     - name: Create only missing email accounts
-      when:
-        - create_email_accounts | default(false)
-        - mailboxes_to_create | length > 0
-        - not safe_mode | default(false)
       uri:
         url: "{{ directadmin_api_url }}/CMD_API_POP"
         method: POST
@@ -193,4 +247,9 @@
       loop_control:
         label: "{{ item.user }}@{{ domain }}"
       register: email_results
+      when:
+        - create_email_accounts | default(false)
+        - mailboxes_to_create is defined and mailboxes_to_create | length > 0
+        - not safe_mode | default(false)
       tags: create_mail
+

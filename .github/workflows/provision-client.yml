@@ -3,7 +3,7 @@ name: Provision Client Domain
 on:
   push:
     branches:
-      - '**'  # Triggers on any branch
+      - '**'
 
 jobs:
   provision:
@@ -11,14 +11,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python, pip, and Ansible
         run: |
           sudo apt update
           sudo apt install -y python3-pip
+          pip3 install --upgrade pip
           pip3 install ansible
-          ansible-galaxy collection install community.general
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r collections/requirements.yml
 
       - name: Run Ansible Playbook for client01
         run: |
@@ -28,3 +31,7 @@ jobs:
             --vault-password-file vault_pass.txt
         env:
           VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}
+
+      - name: Clean up vault password
+        run: rm -f vault_pass.txt
+        if: always()
