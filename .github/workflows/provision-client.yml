@@ -20,9 +20,12 @@ jobs:
           pip3 install ansible
           ansible-galaxy collection install community.general
 
-      - name: Run Ansible Playbook for client01
+      - name: Create vault password file
+        run: echo "${{ secrets.VAULT_PASSWORD }}" > vault_pass.txt
+        # Secure the file so others can't read it
+        shell: bash
+
+      - name: Run Ansible playbook
         run: |
-          echo "$VAULT_PASSWORD" > vault_pass.txt
-          ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --ask-vault-pass
-        env:
-          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}
+          ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --vault-password-file vault_pass.txt
+          rm vault_pass.txt
