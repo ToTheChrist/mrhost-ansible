@@ -158,6 +158,7 @@ Set this up under: GitHub → Settings → Rulesets
 To edit Vault secrets:
 
 ansible-vault edit group_vars/all.yml
+ansible-vault view group_vars/all.yml
 To test a specific domain:
 
 
