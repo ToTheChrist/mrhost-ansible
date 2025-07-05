@@ -1,13 +1,15 @@
-name: Provision Client Domain
-
 on:
-  push:
-    branches:
-      - '**'
+  workflow_dispatch:
+
+env:
+  ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
 
 jobs:
   provision:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        client_file: [clients/client01.yml]
 
     steps:
       - name: Checkout code
@@ -19,17 +21,12 @@ jobs:
           sudo apt install -y python3-pip
           pip3 install --upgrade pip
           pip3 install ansible
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install community.general
+          ansible-galaxy collection install community.general
 
-      - name: Run Ansible Playbook for client01
+      - name: Run Ansible Playbook for matrix client
         run: |
-          echo "$VAULT_PASSWORD" > vault_pass.txt
           ansible-playbook -i inventory/hosts playbooks/fullonboard.yml \
-            --vault-password-file vault_pass.txt
+            -e "client_file=${{ matrix.client_file }}" \
+            --vault-password-file /dev/stdin <<< "$ANSIBLE_VAULT_PASS"
         env:
-          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}
-
-      - name: Clean up vault password
-        run: rm -f vault_pass.txt
-        if: always()
+          ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
