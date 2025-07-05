@@ -5,8 +5,7 @@
   connection: local
   gather_facts: false
   vars_files:
-    - "../clients/client01.yml"
-    - "../group_vars/all.yml"
+    - "{{ client_file }}"
 
   roles:
     - role: directadmin
