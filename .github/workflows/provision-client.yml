@@ -1,15 +1,27 @@
-on:
-  workflow_dispatch:
+name: Provision Client Domain
 
-env:
-  ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
+on:
+  push:
+    branches:
+      - '**'               # Runs on any branch push
+  workflow_dispatch:
+    inputs:
+      client_file:
+        description: "Path to client YAML file (e.g., clients/client01.yml)"
+        required: true
+        default: "clients/client01.yml"
 
 jobs:
   provision:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        client_file: [clients/client01.yml]
+
+    # To run for multiple clients automatically, uncomment the matrix below and update as needed
+    # strategy:
+    #   matrix:
+    #     client_file:
+    #       - clients/client01.yml
+    #       - clients/client02.yml
+    #       - clients/client03.yml
 
     steps:
       - name: Checkout code
@@ -23,10 +35,15 @@ jobs:
           pip3 install ansible
           ansible-galaxy collection install community.general
 
-      - name: Run Ansible Playbook for matrix client
+      - name: Run Ansible Playbook
         run: |
+          # Determine the client file to use
+          if [ -n "${{ github.event.inputs.client_file }}" ]; then
+            export CLIENT_FILE="${{ github.event.inputs.client_file }}"
+          else
+            export CLIENT_FILE="clients/client01.yml"
+          fi
+
           ansible-playbook -i inventory/hosts playbooks/fullonboard.yml \
-            -e "client_file=${{ matrix.client_file }}" \
-            --vault-password-file /dev/stdin <<< "$ANSIBLE_VAULT_PASS"
-        env:
-          ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
+            -e "client_file=$CLIENT_FILE" \
+            --vault-password
