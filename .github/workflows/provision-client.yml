@@ -19,9 +19,8 @@ jobs:
           sudo apt install -y python3-pip
           pip3 install --upgrade pip
           pip3 install ansible
-
       - name: Install Ansible collections
-        run: ansible-galaxy collection install -r collections/requirements.yml
+        run: ansible-galaxy collection install community.general
 
       - name: Run Ansible Playbook for client01
         run: |
