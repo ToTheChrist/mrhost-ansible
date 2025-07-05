@@ -27,6 +27,13 @@ jobs:
           pip3 install ansible
           ansible-galaxy collection install community.general
 
+      - name: Show working directory and files
+        run: |
+          pwd
+          ls -l
+          ls -l group_vars
+          ls -l inventory
+
       - name: Write vault password file
         run: echo "$ANSIBLE_VAULT_PASS" > vault_pass.txt
         env:
@@ -57,3 +64,4 @@ jobs:
       - name: Remove vault password file
         run: rm -f vault_pass.txt
         if: always()
+
