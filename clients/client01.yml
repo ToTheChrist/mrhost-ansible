@@ -1,9 +1,24 @@
-# clients/client01.yml
-username: client01
-domain: client01domain.com
-email: client01@example.com
+username: client02
+domain: hudprodukt.se
+email: test@hudprodukt.se
 email_accounts:
   - user: info
 create_email_accounts: false
 package: clients
-ip: 145.223.34.210
+ip: "{{ shared_ip }}"
+
+cloudflare_dns_records:
+  - type: A
+    name: www
+    value: 123.45.67.89
+    ttl: 3600
+    proxied: true
+  - type: MX
+    name: "@"
+    value: mail.client01.com
+    ttl: 3600
+    priority: 10
+  - type: TXT
+    name: "@"
+    value: "v=spf1 include:_spf.example.com ~all"
+    ttl: 3600

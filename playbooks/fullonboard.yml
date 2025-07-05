@@ -1,14 +1,14 @@
 ---
-# playbooks/full_onboarding.yml
+# playbooks/fullonboard.yml
 - name: Full Onboarding for Web Hosting Client
   hosts: localhost
   connection: local
   gather_facts: false
   vars_files:
-    - "../clients/client01.yml"
-    - "../group_vars/all.yml"
+    - "{{ client_file }}"
 
   roles:
     - role: directadmin
-  # - role: cloudflare
+    - role: cloudflare
   # - role: monitoring
+

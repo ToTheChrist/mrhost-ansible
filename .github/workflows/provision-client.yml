@@ -1,0 +1,31 @@
+name: Provision Client Domain
+
+on:
+  push:
+    branches:
+      - '**'  # Triggers on any branch
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python, pip, and Ansible
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip
+          pip3 install ansible
+          ansible-galaxy collection install community.general
+
+      - name: Create vault password file
+        run: echo -n "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > vault_pass.txt
+        # Secure the file so others can't read it
+        shell: bash
+
+      - name: Run Ansible playbook
+        run: |
+          ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --vault-password-file vault_pass.txt
+          rm vault_pass.txt
