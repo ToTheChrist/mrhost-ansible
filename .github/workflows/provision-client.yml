@@ -3,13 +3,7 @@ name: Provision Client Domain
 on:
   push:
     branches:
-      - '**'
-  workflow_dispatch:
-    inputs:
-      client_file:
-        description: "Path to client YAML file (e.g., clients/client01.yml)"
-        required: true
-        default: "clients/client01.yml"
+      - '**'  # Triggers on any branch
 
 jobs:
   provision:
@@ -23,45 +17,14 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y python3-pip
-          pip3 install --upgrade pip
           pip3 install ansible
           ansible-galaxy collection install community.general
 
-      - name: Show working directory and files
+      - name: Run Ansible Playbook for client01
         run: |
-          pwd
-          ls -l
-          ls -l group_vars
-          ls -l inventory
-
-      - name: Write vault password file
-        run: echo "$ANSIBLE_VAULT_PASS" > vault_pass.txt
-        env:
-          ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
-
-      - name: Determine client file
-        id: client
-        run: |
-          if [ -n "${{ github.event.inputs.client_file }}" ]; then
-            echo "client_file=${{ github.event.inputs.client_file }}" >> $GITHUB_OUTPUT
-          else
-            echo "client_file=clients/client01.yml" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Show working directory and files
-        run: |
-          pwd
-          ls -l
-          ls -l group_vars
-          ls -l inventory
-
-      - name: Run Ansible Playbook
-        run: |
+          echo "$VAULT_PASSWORD" > vault_pass.txt
           ansible-playbook -i inventory/hosts playbooks/fullonboard.yml \
-            -e "client_file=${{ steps.client.outputs.client_file }}" \
+            -e "client_file=clients/client01.yml" \
             --vault-password-file vault_pass.txt
-
-      - name: Remove vault password file
-        run: rm -f vault_pass.txt
-        if: always()
-
+        env:
+          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}

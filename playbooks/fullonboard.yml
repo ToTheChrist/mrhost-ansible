@@ -5,9 +5,11 @@
   connection: local
   gather_facts: false
   vars_files:
-    - "{{ client_file }}"
+    - "../clients/client01.yml"
+    - "../group_vars/all.yml"
 
   roles:
     - role: directadmin
     - role: cloudflare
   # - role: monitoring
+
