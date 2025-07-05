@@ -41,6 +41,13 @@ jobs:
             echo "client_file=clients/client01.yml" >> $GITHUB_OUTPUT
           fi
 
+      - name: Show working directory and files
+        run: |
+          pwd
+          ls -l
+          ls -l group_vars
+          ls -l inventory
+
       - name: Run Ansible Playbook
         run: |
           ansible-playbook -i inventory/hosts playbooks/fullonboard.yml \
