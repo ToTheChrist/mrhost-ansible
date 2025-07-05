@@ -3,7 +3,7 @@ name: Provision Client Domain
 on:
   push:
     branches:
-      - '**'               # Runs on any branch push
+      - '**'
   workflow_dispatch:
     inputs:
       client_file:
@@ -14,14 +14,6 @@ on:
 jobs:
   provision:
     runs-on: ubuntu-latest
-
-    # To run for multiple clients automatically, uncomment the matrix below and update as needed
-    # strategy:
-    #   matrix:
-    #     client_file:
-    #       - clients/client01.yml
-    #       - clients/client02.yml
-    #       - clients/client03.yml
 
     steps:
       - name: Checkout code
@@ -35,15 +27,26 @@ jobs:
           pip3 install ansible
           ansible-galaxy collection install community.general
 
-      - name: Run Ansible Playbook
+      - name: Write vault password file
+        run: echo "$ANSIBLE_VAULT_PASS" > vault_pass.txt
+        env:
+          ANSIBLE_VAULT_PASS: ${{ secrets.ANSIBLE_VAULT_PASS }}
+
+      - name: Determine client file
+        id: client
         run: |
-          # Determine the client file to use
           if [ -n "${{ github.event.inputs.client_file }}" ]; then
-            export CLIENT_FILE="${{ github.event.inputs.client_file }}"
+            echo "client_file=${{ github.event.inputs.client_file }}" >> $GITHUB_OUTPUT
           else
-            export CLIENT_FILE="clients/client01.yml"
+            echo "client_file=clients/client01.yml" >> $GITHUB_OUTPUT
           fi
 
+      - name: Run Ansible Playbook
+        run: |
           ansible-playbook -i inventory/hosts playbooks/fullonboard.yml \
-            -e "client_file=$CLIENT_FILE" \
-            --vault-password
+            -e "client_file=${{ steps.client.outputs.client_file }}" \
+            --vault-password-file vault_pass.txt
+
+      - name: Remove vault password file
+        run: rm -f vault_pass.txt
+        if: always()
