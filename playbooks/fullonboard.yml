@@ -1,11 +1,13 @@
 ---
-# playbooks/full_onboarding.yml
+# playbooks/fullonboard.yml
 - name: Full Onboarding for Web Hosting Client
   hosts: localhost
   connection: local
   gather_facts: false
   vars_files:
-    - "{{ client_file }}"
+  tasks:
+  - name: Load client secrets
+    include_vars: "{{ client_file }}"
 
   roles:
     - role: directadmin
