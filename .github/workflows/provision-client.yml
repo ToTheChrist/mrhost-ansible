@@ -23,8 +23,6 @@ jobs:
       - name: Run Ansible Playbook for client01
         run: |
           echo "$VAULT_PASSWORD" > vault_pass.txt
-          ansible-playbook -i inventory/hosts playbooks/fullonboard.yml \
-            -e "client_file=clients/client01.yml" \
-            --vault-password-file vault_pass.txt
+          ansible-playbook -i inventory/hosts playbooks/fullonboard.yml --ask-vault-pass
         env:
           VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASS }}
